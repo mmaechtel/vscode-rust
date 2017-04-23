@@ -1,11 +1,11 @@
+import { spawn } from 'child_process';
+
 import {
     CloseAction,
     ErrorAction,
     ErrorHandler as IErrorHandler,
     LanguageClient,
-    LanguageClientOptions as ClientOptions,
-    RevealOutputChannelOn,
-    ServerOptions
+    RevealOutputChannelOn
 } from 'vscode-languageclient';
 
 class ErrorHandler implements IErrorHandler {
@@ -27,33 +27,39 @@ class ErrorHandler implements IErrorHandler {
 }
 
 export class Creator {
-    private clientOptions: ClientOptions;
-
-    private serverOptions: ServerOptions;
+    private executable: string;
+    private args: string[];
+    private env: any;
+    private revealOutputChannelOn: RevealOutputChannelOn;
+    private onClosed: () => void;
 
     public constructor(
         executable: string,
-        args: string[] | undefined,
-        env: any | undefined,
+        args: string[],
+        env: any,
         revealOutputChannelOn: RevealOutputChannelOn,
         onClosed: () => void
     ) {
-        this.clientOptions = {
-            documentSelector: ['rust'],
-            revealOutputChannelOn,
-            errorHandler: new ErrorHandler(onClosed)
-        };
-
-        this.serverOptions = {
-            command: executable,
-            args,
-            options: {
-                env: Object.assign({}, process.env, env ? env : {})
-            }
-        };
+        this.executable = executable;
+        this.args = args;
+        this.env = env;
+        this.revealOutputChannelOn = revealOutputChannelOn;
+        this.onClosed = onClosed;
     }
 
     public create(): LanguageClient {
-        return new LanguageClient('Rust Language Server', this.serverOptions, this.clientOptions);
+        const clientOptions = {
+            documentSelector: ['rust'],
+            revealOutputChannelOn: this.revealOutputChannelOn,
+            errorHandler: new ErrorHandler(this.onClosed)
+        };
+        const opts = {
+            env: Object.assign({}, process.env, this.env)
+        };
+        const serverOptions = () => {
+            const process = spawn(this.executable, this.args, opts);
+            return Promise.resolve(process);
+        };
+        return new LanguageClient('Rust Language Server', serverOptions, clientOptions);
     }
 }
